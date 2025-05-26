@@ -14,7 +14,6 @@ import heic2any from "heic2any";
 
 export default function UploadPage() {
   const { eventId } = useParams();
-  const [file, setFile] = useState(null);
   const [visibility, setVisibility] = useState("public");
   const [uploading, setUploading] = useState(false);
   const [files, setFiles] = useState([]);

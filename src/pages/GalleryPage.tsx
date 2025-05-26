@@ -10,13 +10,6 @@ import {
   getDoc,
   doc,
 } from "firebase/firestore";
-import Gallery from "react-photo-gallery";
-import Lightbox from "yet-another-react-lightbox";
-import "yet-another-react-lightbox/styles.css";
-import "yet-another-react-lightbox/plugins/thumbnails.css";
-import Thumbnails from "yet-another-react-lightbox/plugins/thumbnails";
-import { RowsPhotoAlbum } from "react-photo-album";
-import "react-photo-album/rows.css";
 
 import LightGallery from "lightgallery/react";
 import lgVideo from "lightgallery/plugins/video";
@@ -39,8 +32,6 @@ export default function GalleryPage() {
   const [mediaList, setMediaList] = useState<
     { src: string; width: number; height: number }[]
   >([]);
-  const [open, setOpen] = useState(false);
-  const [currentIndex, setCurrentIndex] = useState(0);
   const [eventName, setEventName] = useState("");
   const [loading, setLoading] = useState(true);
   const onInit = () => {
