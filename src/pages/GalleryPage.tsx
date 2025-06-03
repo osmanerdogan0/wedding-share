@@ -113,10 +113,20 @@ export default function GalleryPage() {
           return null;
         });
 
-        // Filtreyi düzgün kullan, null'ları at!
-        const results = (await Promise.all(promises)).filter(
-          (item): item is MediaItem => item !== null
-        );
+        const isValidMediaItem = (item: any): item is MediaItem => {
+          if (!item) return false;
+          if (item.type === "image") {
+            return !!item.src && !!item.width && !!item.height;
+          } else if (item.type === "video") {
+            return (
+              !!item.src && !!item.thumbnail && !!item.width && !!item.height
+            );
+          }
+          return false;
+        };
+
+        const results = (await Promise.all(promises)).filter(isValidMediaItem);
+
         setMediaList(results);
       } catch (e) {
         console.error("Media fetch error:", e);
