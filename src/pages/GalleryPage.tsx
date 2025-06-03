@@ -27,11 +27,17 @@ import "lightgallery/css/lg-video.css";
 import lgThumbnail from "lightgallery/plugins/thumbnail";
 import lgZoom from "lightgallery/plugins/zoom";
 
+type MediaItem = {
+  src: string;
+  width: number;
+  height: number;
+  type: "image" | "video";
+  senderName?: string;
+  thumbnail?: string;
+};
 export default function GalleryPage() {
-  const { eventId } = useParams();
-  const [mediaList, setMediaList] = useState<
-    { src: string; width: number; height: number }[]
-  >([]);
+  const { eventId } = useParams<{ eventId: string }>();
+  const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [eventName, setEventName] = useState("");
   const [loading, setLoading] = useState(true);
   const onInit = () => {
@@ -41,81 +47,86 @@ export default function GalleryPage() {
     url: string
   ): Promise<{ width: number; height: number }> => {
     return new Promise((resolve) => {
-      const img = new Image();
+      const img = new window.Image();
       img.src = url;
       img.onload = () => {
         resolve({ width: img.width, height: img.height });
       };
     });
   };
+
   useEffect(() => {
+    if (!eventId) return; // eventId kesinlikle olmalı
+
     const fetchEvent = async () => {
       try {
         const docRef = doc(db, "events", eventId);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
-          console.log("Data: ", data);
-          setEventName(data.eventName || ""); // eventName yoksa boş string ata
+          setEventName(data.eventName || "");
         } else {
-          console.log("Event bulunamadı!");
+          setEventName("");
         }
       } catch (error) {
         console.error("Event verisi alınırken hata:", error);
       }
     };
 
-    fetchEvent();
     const fetchMedia = async () => {
       setLoading(true);
-      const q = query(
-        collection(db, "events", eventId, "media"),
-        where("visibility", "==", "public"),
-        orderBy("createdAt", "desc")
-      );
-      const snapshot = await getDocs(q);
-      const promises = snapshot.docs.map(async (doc) => {
-        const data = doc.data();
-        if (!data.url) return null;
+      try {
+        const q = query(
+          collection(db, "events", eventId, "media"),
+          where("visibility", "==", "public"),
+          orderBy("createdAt", "desc")
+        );
+        const snapshot = await getDocs(q);
+        const promises = snapshot.docs.map(async (docSnap) => {
+          const data = docSnap.data();
+          if (!data.url || !data.type) return null;
 
-        if (data.type === "image") {
-          try {
-            const size = await loadImageSize(data.url);
+          if (data.type === "image") {
+            try {
+              const size = await loadImageSize(data.url);
+              return {
+                src: data.url,
+                type: "image" as const,
+                width: size.width,
+                height: size.height,
+                senderName: data.senderName,
+              };
+            } catch (err) {
+              console.error("Görsel boyutu alınamadı:", err);
+              return null;
+            }
+          } else if (data.type === "video") {
             return {
+              thumbnail: data.thumbnail,
               src: data.url,
-              type: "image",
-              width: size.width,
-              height: size.height,
+              type: "video" as const,
+              width: 1280,
+              height: 720,
               senderName: data.senderName,
             };
-          } catch (err) {
-            console.error("Görsel boyutu alınamadı:", err);
-            return null;
           }
-        } else if (data.type === "video") {
-          // Video için sabit boyut döndür
-          return {
-            thumbnail: data.thumbnail,
-            src: data.url,
-            type: "video",
-            width: 1280,
-            height: 720,
-            senderName: data.senderName,
-          };
-        }
+          return null;
+        });
 
-        return null;
-      });
-
-      const results = await Promise.all(promises);
-      setMediaList(results.filter(Boolean));
+        // Filtreyi düzgün kullan, null'ları at!
+        const results = (await Promise.all(promises)).filter(
+          (item): item is MediaItem => item !== null
+        );
+        setMediaList(results);
+      } catch (e) {
+        console.error("Media fetch error:", e);
+      }
       setLoading(false);
     };
 
+    fetchEvent();
     fetchMedia();
-    console.log("mediaList:", mediaList);
   }, [eventId]);
-
   return (
     <div style={{ padding: 20 }}>
       <h1
