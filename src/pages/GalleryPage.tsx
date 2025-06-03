@@ -27,14 +27,24 @@ import "lightgallery/css/lg-video.css";
 import lgThumbnail from "lightgallery/plugins/thumbnail";
 import lgZoom from "lightgallery/plugins/zoom";
 
-type MediaItem = {
+type ImageMedia = {
   src: string;
   width: number;
   height: number;
-  type: "image" | "video";
+  type: "image";
   senderName?: string;
-  thumbnail?: string;
 };
+
+type VideoMedia = {
+  src: string;
+  thumbnail: string;
+  width: number;
+  height: number;
+  type: "video";
+  senderName?: string;
+};
+
+type MediaItem = ImageMedia | VideoMedia;
 export default function GalleryPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
@@ -101,33 +111,34 @@ export default function GalleryPage() {
               return null;
             }
           } else if (data.type === "video") {
+            if (!data.thumbnail) return null;
             return {
-              thumbnail: data.thumbnail,
               src: data.url,
+              thumbnail: data.thumbnail,
               type: "video" as const,
               width: 1280,
               height: 720,
               senderName: data.senderName,
             };
           }
+
           return null;
         });
-
-        const isValidMediaItem = (item: any): item is MediaItem => {
-          if (!item) return false;
-          if (item.type === "image") {
-            return !!item.src && !!item.width && !!item.height;
-          } else if (item.type === "video") {
-            return (
-              !!item.src && !!item.thumbnail && !!item.width && !!item.height
-            );
-          }
-          return false;
+        const isMediaItem = (item: any): item is MediaItem => {
+          return (
+            item !== null &&
+            typeof item === "object" &&
+            typeof item.src === "string" &&
+            (item.type === "image" ||
+              (item.type === "video" && typeof item.thumbnail === "string")) &&
+            typeof item.width === "number" &&
+            typeof item.height === "number"
+          );
         };
+        const rawResults = await Promise.all(promises);
+        const filteredResults = rawResults.filter(isMediaItem);
 
-        const results = (await Promise.all(promises)).filter(isValidMediaItem);
-
-        setMediaList(results);
+        setMediaList(filteredResults as MediaItem[]);
       } catch (e) {
         console.error("Media fetch error:", e);
       }
