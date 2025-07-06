@@ -15,6 +15,9 @@ import {
 } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import Swal from "sweetalert2";
+
+import Recorder from "recorder-js";
+
 type VoiceItem = {
   senderName: string;
   audioUrl: string;
@@ -29,14 +32,12 @@ export default function VoiceUploadPage() {
   const [visibility, setVisibility] = useState("public");
   const [recording, setRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunks = useRef<Blob[]>([]);
+  const recorderRef = useRef<Recorder | null>(null);
   const [uploading, setUploading] = useState(false);
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
 
   const [voices, setVoices] = useState<VoiceItem[]>([]);
-  //
 
   useEffect(() => {
     if (!eventId) return;
@@ -87,42 +88,31 @@ export default function VoiceUploadPage() {
     fetchVoices();
   }, [eventId]);
 
-  //
-
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      chunks.current = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.current.push(e.data);
-      };
-
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunks.current, { type: "audio/webm" });
-        setAudioBlob(blob);
-        chunks.current = [];
-      };
-
-      mediaRecorder.start();
+      const audioContext = new AudioContext();
+      recorderRef.current = new Recorder(audioContext, {
+        // optional: specify options here
+        // e.g. workerPath: 'recorderWorker.js'
+      });
+      await recorderRef.current.init(stream);
+      recorderRef.current.start();
       setRecording(true);
 
-      // ⏱ Otomatik 30 saniyede durdur
+      // 30 saniyede otomatik durdurma
       setTimeout(() => {
-        if (mediaRecorder.state !== "inactive") {
-          mediaRecorder.stop();
-          setRecording(false);
-        }
-      }, 30_000); // 30 saniye
+        if (recording) stopRecording();
+      }, 30000);
     } catch (error) {
       alert("Mikrofona erişilemiyor: " + error);
     }
   };
 
-  const stopRecording = () => {
-    mediaRecorderRef.current?.stop();
+  const stopRecording = async () => {
+    if (!recorderRef.current) return;
+    const { blob } = await recorderRef.current.stop();
+    setAudioBlob(blob);
     setRecording(false);
   };
 
@@ -132,7 +122,7 @@ export default function VoiceUploadPage() {
     setUploading(true);
     try {
       const storage = getStorage();
-      const audioRef = ref(storage, `voices/${eventId}/${Date.now()}.webm`);
+      const audioRef = ref(storage, `voices/${eventId}/${Date.now()}.wav`);
       await uploadBytes(audioRef, audioBlob);
       const downloadURL = await getDownloadURL(audioRef);
 
