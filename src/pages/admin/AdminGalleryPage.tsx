@@ -1,14 +1,14 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { db } from "../firebaseConfig";
+import { db } from "../../firebaseConfig";
 import {
   collection,
   query,
-  where,
   orderBy,
   getDocs,
   getDoc,
   doc,
+  updateDoc,
 } from "firebase/firestore";
 
 import LightGallery from "lightgallery/react";
@@ -26,26 +26,31 @@ import "lightgallery/css/lg-video.css";
 // import plugins if you need
 import lgThumbnail from "lightgallery/plugins/thumbnail";
 import lgZoom from "lightgallery/plugins/zoom";
+import Swal from "sweetalert2";
 
 type ImageMedia = {
+  id: string;
   src: string;
   width: number;
   height: number;
   type: "image";
   senderName?: string;
+  visibility?: string;
 };
 
 type VideoMedia = {
+  id: string;
   src: string;
   thumbnail: string;
   width: number;
   height: number;
   type: "video";
   senderName?: string;
+  visibility?: string;
 };
 
 type MediaItem = ImageMedia | VideoMedia;
-export default function GalleryPage() {
+export default function AdminGalleryPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [eventName, setEventName] = useState("");
@@ -120,7 +125,6 @@ export default function GalleryPage() {
       try {
         const q = query(
           collection(db, "events", eventId, "media"),
-          where("visibility", "==", "public"),
           orderBy("createdAt", "desc")
         );
         const snapshot = await getDocs(q);
@@ -128,33 +132,28 @@ export default function GalleryPage() {
           const data = docSnap.data();
           if (!data.url || !data.type) return null;
 
-          if (data.type === "image") {
-            try {
-              const size = await loadImageSize(data.url);
-              return {
+          return data.type === "image"
+            ? {
+                id: docSnap.id,
                 src: data.url,
                 type: "image" as const,
-                width: size.width,
-                height: size.height,
+                width: (await loadImageSize(data.url)).width,
+                height: (await loadImageSize(data.url)).height,
                 senderName: data.senderName,
-              };
-            } catch (err) {
-              console.error("Görsel boyutu alınamadı:", err);
-              return null;
-            }
-          } else if (data.type === "video") {
-            if (!data.thumbnail) return null;
-            return {
-              src: data.url,
-              thumbnail: data.thumbnail,
-              type: "video" as const,
-              width: 1280,
-              height: 720,
-              senderName: data.senderName,
-            };
-          }
-
-          return null;
+                visibility: data.visibility,
+              }
+            : data.type === "video" && data.thumbnail
+            ? {
+                id: docSnap.id,
+                src: data.url,
+                thumbnail: data.thumbnail,
+                type: "video" as const,
+                width: 1280,
+                height: 720,
+                senderName: data.senderName,
+                visibility: data.visibility,
+              }
+            : null;
         });
         const isMediaItem = (item: any): item is MediaItem => {
           return (
@@ -180,6 +179,51 @@ export default function GalleryPage() {
     fetchEvent();
     fetchMedia();
   }, [eventId]);
+  const makePrivate = async (mediaId: string, currentVisibility: string) => {
+    if (!eventId) return;
+    const newVisibility = currentVisibility === "public" ? "private" : "public";
+    try {
+      const mediaDocRef = doc(db, "events", eventId, "media", mediaId);
+      await updateDoc(mediaDocRef, {
+        visibility: currentVisibility === "public" ? "private" : "public",
+      });
+
+      // Durumu güncellemek için mediaList'i filtrele veya güncelle
+      setMediaList((prev) =>
+        prev.map((item) =>
+          item.id === mediaId
+            ? {
+                ...item,
+                visibility:
+                  currentVisibility === "public" ? "private" : "public",
+              }
+            : item
+        )
+      );
+
+      Swal.fire({
+        title: "Başarılı!",
+        text:
+          newVisibility === "private"
+            ? "Medya gizlendi (private yapıldı)."
+            : "Medya artık herkese açık (public yapıldı).",
+        icon: "success",
+        confirmButtonText: "Tamam",
+      });
+    } catch (error) {
+      console.error("Güncelleme başarısız:", error);
+      Swal.fire({
+        title: "Hata!",
+        text:
+          newVisibility === "private"
+            ? "Medya gizlenirken hata oluştu."
+            : "Medya herkese açık yapılırken hata oluştu.",
+        icon: "error",
+        confirmButtonText: "Tamam",
+      });
+    }
+  };
+
   return (
     <div style={{ padding: 20 }}>
       <h1
@@ -194,21 +238,14 @@ export default function GalleryPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
         <button
-          onClick={() => navigate(`/${eventId}`)}
-          className="w-full px-4 py-4 bg-pink-500 hover:bg-pink-600 text-white font-semibold rounded-xl shadow-md transition-all"
-        >
-          📸 Medya Yükle
-        </button>
-
-        <button
-          onClick={() => navigate(`/${eventId}/memoryUpload`)}
+          onClick={() => navigate(`/${eventId}/adminMemory`)}
           className="w-full px-4 py-4 bg-rose-500 hover:bg-rose-600 text-white font-semibold rounded-xl shadow-md transition-all"
         >
           📖 Anı Defteri
         </button>
 
         <button
-          onClick={() => navigate(`/${eventId}/voiceUpload`)}
+          onClick={() => navigate(`/${eventId}/adminVoice`)}
           className="w-full px-4 py-4 bg-purple-500 hover:bg-purple-600 text-white font-semibold rounded-xl shadow-md transition-all"
         >
           🔊 Sesli Anı Defteri
@@ -242,51 +279,78 @@ export default function GalleryPage() {
         plugins={[lgThumbnail, lgZoom, lgVideo]}
         elementClassNames="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4"
       >
-        {mediaList.map((media, index) =>
-          media.type === "image" ? (
-            <a
-              key={index}
-              href={media.src}
-              data-sub-html={`<h4>Gönderen: ${
-                media.senderName || "Anonim"
-              }</h4>`}
-              className="block w-full aspect-square overflow-hidden rounded-lg"
-            >
-              <img
-                src={media.src}
-                alt=""
-                className="w-full h-full object-cover rounded-lg cursor-pointer"
-              />
-            </a>
-          ) : (
-            <a
-              key={index}
-              data-lg-size="1280-720"
-              data-sub-html={`<h4>Gönderen: ${
-                media.senderName || "Anonim"
-              }</h4>`}
-              data-video={JSON.stringify({
-                source: [
-                  {
-                    src: media.src,
-                    type: "video/mp4",
+        {mediaList.map((media) => (
+          <div key={media.id} className="relative rounded-lg overflow-hidden">
+            {media.visibility === "public" && (
+              <button
+                onClick={(e) => {
+                  e.preventDefault(); // link açılmasını engelle
+                  const visibility = media.visibility ?? "public";
+                  makePrivate(media.id, visibility);
+                }}
+                className="absolute top-2 right-2 z-20 bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700 transition"
+                title="Medya Gizle"
+              >
+                Gizle
+              </button>
+            )}
+            {media.visibility === "private" && (
+              <button
+                onClick={(e) => {
+                  e.preventDefault(); // link açılmasını engelle
+                  const visibility = media.visibility ?? "public";
+                  makePrivate(media.id, visibility);
+                }}
+                className="absolute top-2 right-2 z-20 bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700 transition"
+                title="Medya Gizle"
+              >
+                Göster
+              </button>
+            )}
+
+            {media.type === "image" ? (
+              <a
+                href={media.src}
+                data-sub-html={`<h4>Gönderen: ${
+                  media.senderName || "Anonim"
+                }</h4>`}
+                className="block w-full aspect-square cursor-pointer"
+              >
+                <img
+                  src={media.src}
+                  alt=""
+                  className="w-full h-full object-cover rounded-lg"
+                />
+              </a>
+            ) : (
+              <a
+                data-lg-size="1280-720"
+                data-sub-html={`<h4>Gönderen: ${
+                  media.senderName || "Anonim"
+                }</h4>`}
+                data-video={JSON.stringify({
+                  source: [
+                    {
+                      src: media.src,
+                      type: "video/mp4",
+                    },
+                  ],
+                  attributes: {
+                    preload: false,
+                    controls: true,
                   },
-                ],
-                attributes: {
-                  preload: false,
-                  controls: true,
-                },
-              })}
-              className="block w-full aspect-square overflow-hidden rounded-lg"
-            >
-              <img
-                src={media.thumbnail}
-                alt="video"
-                className="w-full h-full object-cover rounded-lg cursor-pointer"
-              />
-            </a>
-          )
-        )}
+                })}
+                className="block w-full aspect-square cursor-pointer"
+              >
+                <img
+                  src={media.thumbnail}
+                  alt="video"
+                  className="w-full h-full object-cover rounded-lg"
+                />
+              </a>
+            )}
+          </div>
+        ))}
       </LightGallery>
     </div>
   );

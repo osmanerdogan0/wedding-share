@@ -11,6 +11,7 @@ import {
 } from "firebase/firestore";
 import { v4 as uuidv4 } from "uuid";
 import heic2any from "heic2any";
+import Swal from "sweetalert2";
 
 export default function UploadPage() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -139,7 +140,10 @@ export default function UploadPage() {
         }
 
         const id = uuidv4();
-        const storageRef = ref(storage, `${eventId}/${id}_${(uploadFile as File).name}`);
+        const storageRef = ref(
+          storage,
+          `${eventId}/${id}_${(uploadFile as File).name}`
+        );
         await uploadBytes(storageRef, uploadFile);
         const url = await getDownloadURL(storageRef);
 
@@ -148,7 +152,10 @@ export default function UploadPage() {
           try {
             const base64 = await generateVideoThumbnail(uploadFile as File);
             const blob = await (await fetch(base64)).blob();
-            const thumbRef = ref(storage, `${eventId}/thumbnails/${id}_thumb.jpg`);
+            const thumbRef = ref(
+              storage,
+              `${eventId}/thumbnails/${id}_thumb.jpg`
+            );
             await uploadBytes(thumbRef, blob);
             thumbnailUrl = await getDownloadURL(thumbRef);
           } catch (err) {
@@ -158,19 +165,31 @@ export default function UploadPage() {
 
         await addDoc(collection(db, "events", eventId, "media"), {
           url,
-          type: (uploadFile as File).type.startsWith("video") ? "video" : "image",
+          type: (uploadFile as File).type.startsWith("video")
+            ? "video"
+            : "image",
           visibility,
           senderName: senderName || "Anonim",
           thumbnail: thumbnailUrl,
           createdAt: serverTimestamp(),
         });
+        Swal.fire({
+          title: "Yükleme Tamamlandı!",
+          text: "Dosyanız başarıyla yüklendi.",
+          icon: "success",
+          confirmButtonText: "Tamam",
+        });
       } catch (err) {
         console.error("Yükleme hatası:", err);
-        alert(`Yüklenemedi: ${file.name}`);
+        Swal.fire({
+          title: "Yükleme Başarısız!",
+          text: "Dosyanız yüklenemedi.",
+          icon: "error",
+          confirmButtonText: "Tamam",
+        });
       }
     }
 
-    alert("Yükleme tamamlandı!");
     setFiles([]);
     setUploading(false);
     setSenderName("");
@@ -178,16 +197,35 @@ export default function UploadPage() {
 
   return (
     <div className="max-w-lg mx-auto p-6">
-      <h1 className="text-4xl text-center mb-8 text-black" style={{ fontFamily: "'Ms Madi', cursive" }}>
+      <h1
+        className="text-4xl text-center mb-8 text-black"
+        style={{ fontFamily: "'Ms Madi', cursive" }}
+      >
         {eventName}
       </h1>
 
-      <button
-        onClick={() => navigate(`/${eventId}/gallery`)}
-        className="px-4 py-2 mb-8 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-md transition-colors duration-200"
-      >
-        Galeriyi Görüntüle
-      </button>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+        <button
+          onClick={() => navigate(`/${eventId}/gallery`)}
+          className="w-full px-4 py-4 bg-pink-500 hover:bg-pink-600 text-white font-semibold rounded-xl shadow-md transition-all"
+        >
+          📸 Galeri
+        </button>
+
+        <button
+          onClick={() => navigate(`/${eventId}/memoryUpload`)}
+          className="w-full px-4 py-4 bg-rose-500 hover:bg-rose-600 text-white font-semibold rounded-xl shadow-md transition-all"
+        >
+          📖 Anı Defteri
+        </button>
+
+        <button
+          onClick={() => navigate(`/${eventId}/voiceUpload`)}
+          className="w-full px-4 py-4 bg-purple-500 hover:bg-purple-600 text-white font-semibold rounded-xl shadow-md transition-all"
+        >
+          🔊 Sesli Anı Defteri
+        </button>
+      </div>
 
       <label className="block w-full bg-gray-100 border-2 border-dashed border-gray-300 p-6 text-center rounded-lg cursor-pointer hover:border-pink-400 transition">
         <input
@@ -259,11 +297,15 @@ export default function UploadPage() {
           />
         </div>
 
-        <p className="text-pink-500 font-semibold mb-2 text-sm">Kimler Görebilsin?</p>
+        <p className="text-pink-500 font-semibold mb-2 text-sm">
+          Kimler Görebilsin?
+        </p>
 
         <div
           className="relative flex w-full rounded-full bg-gray-800 text-sm font-medium text-white overflow-hidden cursor-pointer"
-          onClick={() => setVisibility(visibility === "public" ? "private" : "public")}
+          onClick={() =>
+            setVisibility(visibility === "public" ? "private" : "public")
+          }
         >
           <div
             className={`absolute left-1 w-[49%] rounded-full bg-white transition-transform duration-300 h-5/6 top-1/2 -translate-y-1/2 ${
@@ -272,13 +314,21 @@ export default function UploadPage() {
           ></div>
 
           <div className="w-1/2 text-center py-2 z-10">
-            <span className={visibility === "private" ? "text-gray-900" : "text-white"}>
+            <span
+              className={
+                visibility === "private" ? "text-gray-900" : "text-white"
+              }
+            >
               Düğün Sahipleri
             </span>
           </div>
 
           <div className="w-1/2 text-center py-2 z-10">
-            <span className={visibility === "public" ? "text-gray-900" : "text-white"}>
+            <span
+              className={
+                visibility === "public" ? "text-gray-900" : "text-white"
+              }
+            >
               Herkese Açık
             </span>
           </div>
@@ -289,7 +339,9 @@ export default function UploadPage() {
         onClick={handleUpload}
         disabled={uploading}
         className={`mt-6 w-full py-3 rounded-lg text-white font-semibold transition ${
-          uploading ? "bg-gray-400 cursor-not-allowed" : "bg-pink-500 hover:bg-pink-600"
+          uploading
+            ? "bg-gray-400 cursor-not-allowed"
+            : "bg-pink-500 hover:bg-pink-600"
         }`}
       >
         {uploading ? "Yükleniyor..." : "Yükle"}
