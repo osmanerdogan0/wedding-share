@@ -9,23 +9,19 @@ import {
   getDocs,
   getDoc,
   doc,
+  limit,
+  startAfter,
+  QueryDocumentSnapshot,
 } from "firebase/firestore";
-
 import LightGallery from "lightgallery/react";
 import lgVideo from "lightgallery/plugins/video";
+import lgThumbnail from "lightgallery/plugins/thumbnail";
+import lgZoom from "lightgallery/plugins/zoom";
 
-// import styles
 import "lightgallery/css/lightgallery.css";
 import "lightgallery/css/lg-zoom.css";
 import "lightgallery/css/lg-thumbnail.css";
-
-// If you want you can use SCSS instead of css
-import "lightgallery/scss/lightgallery.scss";
-import "lightgallery/scss/lg-zoom.scss";
 import "lightgallery/css/lg-video.css";
-// import plugins if you need
-import lgThumbnail from "lightgallery/plugins/thumbnail";
-import lgZoom from "lightgallery/plugins/zoom";
 
 type ImageMedia = {
   src: string;
@@ -45,51 +41,25 @@ type VideoMedia = {
 };
 
 type MediaItem = ImageMedia | VideoMedia;
+
 export default function GalleryPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [eventName, setEventName] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [lastVisible, setLastVisible] = useState<QueryDocumentSnapshot | null>(
+    null
+  );
   const navigate = useNavigate();
 
-  const onInit = (detail: any) => {
-    const lgInstance = detail.instance;
+  const PAGE_SIZE = 4;
 
-    const toolbar = document.querySelector(".lg-toolbar");
-    if (toolbar && !document.querySelector(".lg-share-btn")) {
-      const shareBtn = document.createElement("button");
-      shareBtn.innerHTML = "Paylaş";
-      shareBtn.className = "lg-share-btn lg-icon";
-      shareBtn.style.marginLeft = "10px";
-      shareBtn.style.marginRight = "10px";
-      shareBtn.onclick = () => {
-        const currentIndex = lgInstance.index;
-        const currentItem = lgInstance.galleryItems[currentIndex];
-        const shareData = {
-          title: "Galeri Paylaşımı",
-          url: currentItem.src,
-        };
-
-        if (navigator.share) {
-          navigator
-            .share(shareData)
-            .catch((err) => console.log("Paylaşma başarısız:", err));
-        } else {
-          alert(
-            "Tarayıcınız paylaşma özelliğini desteklemiyor. URL kopyalandı."
-          );
-          navigator.clipboard.writeText(currentItem.src);
-        }
-      };
-
-      toolbar.appendChild(shareBtn);
-    }
-  };
   const loadImageSize = (
     url: string
   ): Promise<{ width: number; height: number }> => {
     return new Promise((resolve) => {
-      const img = new window.Image();
+      const img = new Image();
       img.src = url;
       img.onload = () => {
         resolve({ width: img.width, height: img.height });
@@ -97,34 +67,46 @@ export default function GalleryPage() {
     });
   };
 
-  useEffect(() => {
-    if (!eventId) return; // eventId kesinlikle olmalı
-
-    const fetchEvent = async () => {
-      try {
-        const docRef = doc(db, "events", eventId);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setEventName(data.eventName || "");
-        } else {
-          setEventName("");
-        }
-      } catch (error) {
-        console.error("Event verisi alınırken hata:", error);
+  const fetchEvent = async () => {
+    if (!eventId) return;
+    try {
+      const docRef = doc(db, "events", eventId);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        setEventName(docSnap.data().eventName || "");
       }
-    };
+    } catch (error) {
+      console.error("Event verisi alınırken hata:", error);
+    }
+  };
 
-    const fetchMedia = async () => {
-      setLoading(true);
-      try {
-        const q = query(
+  const fetchMediaPage = async () => {
+    if (!eventId || !hasMore || loading) return;
+    setLoading(true);
+
+    try {
+      let q;
+      if (lastVisible) {
+        q = query(
           collection(db, "events", eventId, "media"),
           where("visibility", "==", "public"),
-          orderBy("createdAt", "desc")
+          orderBy("createdAt", "desc"),
+          startAfter(lastVisible),
+          limit(PAGE_SIZE)
         );
-        const snapshot = await getDocs(q);
-        const promises = snapshot.docs.map(async (docSnap) => {
+      } else {
+        q = query(
+          collection(db, "events", eventId, "media"),
+          where("visibility", "==", "public"),
+          orderBy("createdAt", "desc"),
+          limit(PAGE_SIZE)
+        );
+      }
+
+      const snapshot = await getDocs(q);
+
+      const items: MediaItem[] = await Promise.all(
+        snapshot.docs.map(async (docSnap) => {
           const data = docSnap.data();
           if (!data.url || !data.type) return null;
 
@@ -138,12 +120,10 @@ export default function GalleryPage() {
                 height: size.height,
                 senderName: data.senderName,
               };
-            } catch (err) {
-              console.error("Görsel boyutu alınamadı:", err);
+            } catch {
               return null;
             }
-          } else if (data.type === "video") {
-            if (!data.thumbnail) return null;
+          } else if (data.type === "video" && data.thumbnail) {
             return {
               src: data.url,
               thumbnail: data.thumbnail,
@@ -155,31 +135,74 @@ export default function GalleryPage() {
           }
 
           return null;
-        });
-        const isMediaItem = (item: any): item is MediaItem => {
-          return (
-            item !== null &&
-            typeof item === "object" &&
-            typeof item.src === "string" &&
-            (item.type === "image" ||
-              (item.type === "video" && typeof item.thumbnail === "string")) &&
-            typeof item.width === "number" &&
-            typeof item.height === "number"
-          );
-        };
-        const rawResults = await Promise.all(promises);
-        const filteredResults = rawResults.filter(isMediaItem);
+        })
+      );
 
-        setMediaList(filteredResults as MediaItem[]);
-      } catch (e) {
-        console.error("Media fetch error:", e);
-      }
-      setLoading(false);
-    };
+      const filtered = items.filter((i): i is MediaItem => i !== null);
+      setMediaList((prev) => [...prev, ...filtered]);
 
+      if (snapshot.docs.length < PAGE_SIZE) setHasMore(false);
+      if (snapshot.docs.length > 0)
+        setLastVisible(snapshot.docs[snapshot.docs.length - 1]);
+    } catch (error) {
+      console.error("Media fetch error:", error);
+    }
+
+    setLoading(false);
+  };
+
+  useEffect(() => {
     fetchEvent();
-    fetchMedia();
   }, [eventId]);
+
+  useEffect(() => {
+    setMediaList([]);
+    setLastVisible(null);
+    setHasMore(true);
+    fetchMediaPage();
+  }, [eventId]);
+
+  useEffect(() => {
+    const onScroll = () => {
+      if (
+        window.innerHeight + window.scrollY >=
+          document.body.offsetHeight - 300 &&
+        !loading &&
+        hasMore
+      ) {
+        fetchMediaPage();
+      }
+    };
+    window.addEventListener("scroll", onScroll);
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [loading, hasMore, lastVisible]);
+
+  const onInit = (detail: any) => {
+    const lgInstance = detail.instance;
+    const toolbar = document.querySelector(".lg-toolbar");
+    if (toolbar && !document.querySelector(".lg-share-btn")) {
+      const shareBtn = document.createElement("button");
+      shareBtn.innerHTML = "Paylaş";
+      shareBtn.className = "lg-share-btn lg-icon";
+      shareBtn.style.margin = "0 10px";
+      shareBtn.onclick = () => {
+        const currentIndex = lgInstance.index;
+        const currentItem = lgInstance.galleryItems[currentIndex];
+        const shareData = {
+          title: "Galeri Paylaşımı",
+          url: currentItem.src,
+        };
+        if (navigator.share) {
+          navigator.share(shareData).catch(console.error);
+        } else {
+          navigator.clipboard.writeText(currentItem.src);
+          alert("Paylaşım desteklenmiyor. URL kopyalandı.");
+        }
+      };
+      toolbar.appendChild(shareBtn);
+    }
+  };
+
   return (
     <div style={{ padding: 20 }}>
       <h1
@@ -197,16 +220,14 @@ export default function GalleryPage() {
           onClick={() => navigate(`/${eventId}`)}
           className="w-full px-4 py-4 bg-pink-500 hover:bg-pink-600 text-white font-semibold rounded-xl shadow-md transition-all"
         >
-          📸 Medya Yükle
+          📸 Fotoğraf&Video Yükle
         </button>
-
         <button
           onClick={() => navigate(`/${eventId}/memoryUpload`)}
           className="w-full px-4 py-4 bg-rose-500 hover:bg-rose-600 text-white font-semibold rounded-xl shadow-md transition-all"
         >
           📖 Anı Defteri
         </button>
-
         <button
           onClick={() => navigate(`/${eventId}/voiceUpload`)}
           className="w-full px-4 py-4 bg-purple-500 hover:bg-purple-600 text-white font-semibold rounded-xl shadow-md transition-all"
@@ -214,28 +235,13 @@ export default function GalleryPage() {
           🔊 Sesli Anı Defteri
         </button>
       </div>
-      {loading === true && (
-        <div className="flex flex-col items-center justify-center min-h-[150px]">
-          <div
-            className={`
-      animate-spin
-      rounded-full
-      border-4
-      border-t-4
-      border-pink-500
-      border-t-transparent
-      w-8 h-8
-    `}
-          />
-          <p className="text-2xl text-center mt-4 text-black">Yükleniyor</p>
-        </div>
-      )}
 
-      {mediaList.length === 0 && loading === false && (
+      {mediaList.length === 0 && !loading && (
         <p className="text-2xl text-center mb-8 text-black">
-          Henüz herkese açık bir medya yüklenmemiş.
+          Henüz herkese açık bir Fotoğraf&Video Yüklenmemiş.
         </p>
       )}
+
       <LightGallery
         onInit={onInit}
         speed={500}
@@ -255,6 +261,7 @@ export default function GalleryPage() {
               <img
                 src={media.src}
                 alt=""
+                loading="lazy"
                 className="w-full h-full object-cover rounded-lg cursor-pointer"
               />
             </a>
@@ -266,28 +273,30 @@ export default function GalleryPage() {
                 media.senderName || "Anonim"
               }</h4>`}
               data-video={JSON.stringify({
-                source: [
-                  {
-                    src: media.src,
-                    type: "video/mp4",
-                  },
-                ],
-                attributes: {
-                  preload: false,
-                  controls: true,
-                },
+                source: [{ src: media.src, type: "video/mp4" }],
+                attributes: { preload: false, controls: true },
               })}
               className="block w-full aspect-square overflow-hidden rounded-lg"
             >
               <img
                 src={media.thumbnail}
                 alt="video"
+                loading="lazy"
                 className="w-full h-full object-cover rounded-lg cursor-pointer"
               />
             </a>
           )
         )}
       </LightGallery>
+
+      {loading && (
+        <div className="text-center py-4 text-gray-600">Yükleniyor...</div>
+      )}
+      {!hasMore && (
+        <div className="text-center py-4 text-gray-600">
+          Tüm içerikler yüklendi.
+        </div>
+      )}
     </div>
   );
 }

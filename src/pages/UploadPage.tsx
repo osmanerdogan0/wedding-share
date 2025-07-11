@@ -28,11 +28,13 @@ export default function UploadPage() {
       try {
         const docRef = doc(db, "events", eventId);
         const docSnap = await getDoc(docRef);
+        console.log("Event: ", docSnap.data());
         if (docSnap.exists()) {
           const data = docSnap.data();
           setEventName(data.eventName || "");
         } else {
           setEventName("");
+          navigate("notfound");
         }
       } catch (error) {
         console.error("Etkinlik alınırken hata:", error);
@@ -144,7 +146,12 @@ export default function UploadPage() {
           storage,
           `${eventId}/${id}_${(uploadFile as File).name}`
         );
-        await uploadBytes(storageRef, uploadFile);
+        const metadata = {
+          contentType: (uploadFile as File).type,
+          cacheControl: "public, max-age=31536000",
+        };
+        await uploadBytes(storageRef, uploadFile, metadata);
+        //await uploadBytes(storageRef, uploadFile);
         const url = await getDownloadURL(storageRef);
 
         let thumbnailUrl: string | null = null;
@@ -197,155 +204,163 @@ export default function UploadPage() {
 
   return (
     <div className="max-w-lg mx-auto p-6">
-      <h1
-        className="text-4xl text-center mb-8 text-black"
-        style={{ fontFamily: "'Ms Madi', cursive" }}
-      >
-        {eventName}
-      </h1>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-        <button
-          onClick={() => navigate(`/${eventId}/gallery`)}
-          className="w-full px-4 py-4 bg-pink-500 hover:bg-pink-600 text-white font-semibold rounded-xl shadow-md transition-all"
+      {eventName === "" ? (
+        <h1
+          className="text-4xl text-center mb-8 text-black"
+          style={{ fontFamily: "'Ms Madi', cursive" }}
         >
-          📸 Galeri
-        </button>
+          Etkinlik Galerisi
+        </h1>
+      ) : (
+        <>
+          <h1
+            className="text-4xl text-center mb-8 text-black"
+            style={{ fontFamily: "'Ms Madi', cursive" }}
+          >
+            {eventName}
+          </h1>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+            <button
+              onClick={() => navigate(`/${eventId}/gallery`)}
+              className="w-full px-4 py-4 bg-pink-500 hover:bg-pink-600 text-white font-semibold rounded-xl shadow-md transition-all"
+            >
+              📸 Galeri
+            </button>
 
-        <button
-          onClick={() => navigate(`/${eventId}/memoryUpload`)}
-          className="w-full px-4 py-4 bg-rose-500 hover:bg-rose-600 text-white font-semibold rounded-xl shadow-md transition-all"
-        >
-          📖 Anı Defteri
-        </button>
+            <button
+              onClick={() => navigate(`/${eventId}/memoryUpload`)}
+              className="w-full px-4 py-4 bg-rose-500 hover:bg-rose-600 text-white font-semibold rounded-xl shadow-md transition-all"
+            >
+              📖 Anı Defteri
+            </button>
 
-        <button
-          onClick={() => navigate(`/${eventId}/voiceUpload`)}
-          className="w-full px-4 py-4 bg-purple-500 hover:bg-purple-600 text-white font-semibold rounded-xl shadow-md transition-all"
-        >
-          🔊 Sesli Anı Defteri
-        </button>
-      </div>
+            <button
+              onClick={() => navigate(`/${eventId}/voiceUpload`)}
+              className="w-full px-4 py-4 bg-purple-500 hover:bg-purple-600 text-white font-semibold rounded-xl shadow-md transition-all"
+            >
+              🔊 Sesli Anı Defteri
+            </button>
+          </div>
+          <label className="block w-full bg-gray-100 border-2 border-dashed border-gray-300 p-6 text-center rounded-lg cursor-pointer hover:border-pink-400 transition">
+            <input
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              onChange={(e) => {
+                const fileList = e.target.files;
+                if (!fileList) return;
+                const selected = Array.from(fileList);
+                if (selected.length > 10) {
+                  alert("En fazla 10 dosya seçebilirsiniz.");
+                  return;
+                }
+                setFiles(selected);
+              }}
+              className="hidden"
+            />
 
-      <label className="block w-full bg-gray-100 border-2 border-dashed border-gray-300 p-6 text-center rounded-lg cursor-pointer hover:border-pink-400 transition">
-        <input
-          type="file"
-          accept="image/*,video/*"
-          multiple
-          onChange={(e) => {
-            const fileList = e.target.files;
-            if (!fileList) return;
-            const selected = Array.from(fileList);
-            if (selected.length > 10) {
-              alert("En fazla 10 dosya seçebilirsiniz.");
-              return;
-            }
-            setFiles(selected);
-          }}
-          className="hidden"
-        />
+            {files.length > 0 ? (
+              <ul className="grid grid-cols-2 gap-4 list-none p-0 m-0">
+                {files.slice(0, 4).map((file, index) => (
+                  <li key={index} className="relative">
+                    {file.type.startsWith("image") ? (
+                      file.type === "image/heic" ||
+                      file.type === "image/heif" ? (
+                        <div className="w-20 h-20 rounded-md bg-gray-700 bg-opacity-80 flex items-center justify-center text-white text-xs font-semibold">
+                          HEIC Dosyası
+                        </div>
+                      ) : (
+                        <img
+                          src={URL.createObjectURL(file)}
+                          alt={file.name}
+                          className="rounded-md w-20 h-20 object-cover"
+                        />
+                      )
+                    ) : (
+                      <div className="w-20 h-20 rounded-md bg-gray-900 bg-opacity-70 flex items-center justify-center text-white text-sm font-semibold">
+                        Video Dosyası
+                      </div>
+                    )}
 
-        {files.length > 0 ? (
-          <ul className="grid grid-cols-2 gap-4 list-none p-0 m-0">
-            {files.slice(0, 4).map((file, index) => (
-              <li key={index} className="relative">
-                {file.type.startsWith("image") ? (
-                  file.type === "image/heic" || file.type === "image/heif" ? (
-                    <div className="w-20 h-20 rounded-md bg-gray-700 bg-opacity-80 flex items-center justify-center text-white text-xs font-semibold">
-                      HEIC Dosyası
-                    </div>
-                  ) : (
-                    <img
-                      src={URL.createObjectURL(file)}
-                      alt={file.name}
-                      className="rounded-md w-20 h-20 object-cover"
-                    />
-                  )
-                ) : (
-                  <div className="w-20 h-20 rounded-md bg-gray-900 bg-opacity-70 flex items-center justify-center text-white text-sm font-semibold">
-                    Video Dosyası
-                  </div>
-                )}
-
-                {index === 3 && files.length > 3 && (
-                  <div className="absolute top-0 left-0 w-20 h-20 rounded-md bg-gray-900 bg-opacity-70 flex items-center justify-center text-white text-sm font-semibold">
-                    +{files.length - 3} medya daha
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <>
-            <p className="text-gray-500">Bir fotoğraf veya video seçin</p>
-            <p className="text-gray-400">(Aynı anda en fazla 10 medya)</p>
-          </>
-        )}
-      </label>
-
-      <div className="w-full max-w-md mx-auto m-4">
-        <div className="mb-6">
-          <label className="block text-pink-500 font-semibold mb-2 text-sm">
-            Kim Gönderiyor?
+                    {index === 3 && files.length > 3 && (
+                      <div className="absolute top-0 left-0 w-20 h-20 rounded-md bg-gray-900 bg-opacity-70 flex items-center justify-center text-white text-sm font-semibold">
+                        +{files.length - 3} medya daha
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <>
+                <p className="text-gray-500">Bir fotoğraf veya video seçin</p>
+                <p className="text-gray-400">(Aynı anda en fazla 10 medya)</p>
+              </>
+            )}
           </label>
-          <input
-            type="text"
-            placeholder="İsim Soyisim (opsiyonel)"
-            value={senderName}
-            onChange={(e) => setSenderName(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-black placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-400"
-          />
-        </div>
+          <div className="w-full max-w-md mx-auto m-4">
+            <div className="mb-6">
+              <label className="block text-pink-500 font-semibold mb-2 text-sm">
+                Kim Gönderiyor?
+              </label>
+              <input
+                type="text"
+                placeholder="İsim Soyisim (opsiyonel)"
+                value={senderName}
+                onChange={(e) => setSenderName(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-black placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-400"
+              />
+            </div>
 
-        <p className="text-pink-500 font-semibold mb-2 text-sm">
-          Kimler Görebilsin?
-        </p>
+            <p className="text-pink-500 font-semibold mb-2 text-sm">
+              Kimler Görebilsin?
+            </p>
 
-        <div
-          className="relative flex w-full rounded-full bg-gray-800 text-sm font-medium text-white overflow-hidden cursor-pointer"
-          onClick={() =>
-            setVisibility(visibility === "public" ? "private" : "public")
-          }
-        >
-          <div
-            className={`absolute left-1 w-[49%] rounded-full bg-white transition-transform duration-300 h-5/6 top-1/2 -translate-y-1/2 ${
-              visibility === "public" ? "translate-x-full" : "translate-x-0"
+            <div
+              className="relative flex w-full rounded-full bg-gray-800 text-sm font-medium text-white overflow-hidden cursor-pointer"
+              onClick={() =>
+                setVisibility(visibility === "public" ? "private" : "public")
+              }
+            >
+              <div
+                className={`absolute left-1 w-[49%] rounded-full bg-white transition-transform duration-300 h-5/6 top-1/2 -translate-y-1/2 ${
+                  visibility === "public" ? "translate-x-full" : "translate-x-0"
+                }`}
+              ></div>
+
+              <div className="w-1/2 text-center py-2 z-10">
+                <span
+                  className={
+                    visibility === "private" ? "text-gray-900" : "text-white"
+                  }
+                >
+                  Düğün Sahipleri
+                </span>
+              </div>
+
+              <div className="w-1/2 text-center py-2 z-10">
+                <span
+                  className={
+                    visibility === "public" ? "text-gray-900" : "text-white"
+                  }
+                >
+                  Herkese Açık
+                </span>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={handleUpload}
+            disabled={uploading}
+            className={`mt-6 w-full py-3 rounded-lg text-white font-semibold transition ${
+              uploading
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-pink-500 hover:bg-pink-600"
             }`}
-          ></div>
-
-          <div className="w-1/2 text-center py-2 z-10">
-            <span
-              className={
-                visibility === "private" ? "text-gray-900" : "text-white"
-              }
-            >
-              Düğün Sahipleri
-            </span>
-          </div>
-
-          <div className="w-1/2 text-center py-2 z-10">
-            <span
-              className={
-                visibility === "public" ? "text-gray-900" : "text-white"
-              }
-            >
-              Herkese Açık
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <button
-        onClick={handleUpload}
-        disabled={uploading}
-        className={`mt-6 w-full py-3 rounded-lg text-white font-semibold transition ${
-          uploading
-            ? "bg-gray-400 cursor-not-allowed"
-            : "bg-pink-500 hover:bg-pink-600"
-        }`}
-      >
-        {uploading ? "Yükleniyor..." : "Yükle"}
-      </button>
+          >
+            {uploading ? "Yükleniyor..." : "Yükle"}
+          </button>
+        </>
+      )}
     </div>
   );
 }

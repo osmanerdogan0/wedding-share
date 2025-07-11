@@ -56,7 +56,14 @@ export default function AdminGalleryPage() {
   const [eventName, setEventName] = useState("");
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
-
+  const [adminInfo, setAdminInfo] = useState<{
+    adminId: string;
+    adminPass: string;
+  }>({
+    adminId: "",
+    adminPass: "",
+  });
+  const [isAuthorized, setIsAuthorized] = useState(false);
   const onInit = (detail: any) => {
     const lgInstance = detail.instance;
 
@@ -104,7 +111,10 @@ export default function AdminGalleryPage() {
 
   useEffect(() => {
     if (!eventId) return; // eventId kesinlikle olmalı
-
+    const cachedLogin = localStorage.getItem(`admin-login-${eventId}`);
+    if (cachedLogin === "true") {
+      setIsAuthorized(true);
+    }
     const fetchEvent = async () => {
       try {
         const docRef = doc(db, "events", eventId);
@@ -112,6 +122,10 @@ export default function AdminGalleryPage() {
         if (docSnap.exists()) {
           const data = docSnap.data();
           setEventName(data.eventName || "");
+          setAdminInfo({
+            adminId: data.adminId || "",
+            adminPass: data.adminPass || "",
+          });
         } else {
           setEventName("");
         }
@@ -223,7 +237,53 @@ export default function AdminGalleryPage() {
       });
     }
   };
-
+  if (!isAuthorized) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-8">
+        <h2 className="text-2xl text-black font-bold mb-4">Yönetici Girişi</h2>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const formData = new FormData(e.currentTarget);
+            const id = formData.get("id")?.toString().trim();
+            const pass = formData.get("pass")?.toString().trim();
+            if (id === adminInfo.adminId && pass === adminInfo.adminPass) {
+              localStorage.setItem(`admin-login-${eventId}`, "true");
+              setIsAuthorized(true);
+            } else {
+              Swal.fire({
+                icon: "error",
+                title: "Giriş Başarısız",
+                text: "ID veya şifre hatalı.",
+              });
+            }
+          }}
+          className="flex flex-col gap-4 w-full max-w-sm"
+        >
+          <input
+            name="id"
+            type="text"
+            placeholder="Admin ID"
+            className="border border-black text-black rounded px-4 py-2"
+            required
+          />
+          <input
+            name="pass"
+            type="password"
+            placeholder="Admin Şifre"
+            className="border border-black text-black rounded px-4 py-2"
+            required
+          />
+          <button
+            type="submit"
+            className="bg-pink-600 hover:bg-pink-700 text-white py-2 rounded"
+          >
+            Giriş Yap
+          </button>
+        </form>
+      </div>
+    );
+  }
   return (
     <div style={{ padding: 20 }}>
       <h1
@@ -250,7 +310,17 @@ export default function AdminGalleryPage() {
         >
           🔊 Sesli Anı Defteri
         </button>
+        <button
+          onClick={() => {
+            localStorage.removeItem(`admin-login-${eventId}`);
+            setIsAuthorized(false);
+          }}
+          className="fixed top-4 right-4 text-sm bg-gray-200 px-3 py-1 rounded"
+        >
+          Çıkış Yap
+        </button>
       </div>
+
       {loading === true && (
         <div className="flex flex-col items-center justify-center min-h-[150px]">
           <div
@@ -270,7 +340,7 @@ export default function AdminGalleryPage() {
 
       {mediaList.length === 0 && loading === false && (
         <p className="text-2xl text-center mb-8 text-black">
-          Henüz herkese açık bir medya yüklenmemiş.
+          Henüz herkese açık bir Fotoğraf&Video Yüklenmemiş.
         </p>
       )}
       <LightGallery

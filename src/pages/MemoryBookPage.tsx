@@ -143,7 +143,7 @@ export default function MemoryUploadPage() {
           onClick={() => navigate(`/${eventId}`)}
           className="w-full px-4 py-4 bg-pink-500 hover:bg-pink-600 text-white font-semibold rounded-xl shadow-md transition-all"
         >
-          📸 Medya Yükle
+          📸 Fotoğraf&Video Yükle
         </button>
 
         <button

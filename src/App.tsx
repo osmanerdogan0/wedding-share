@@ -9,10 +9,12 @@ import VoiceUploadPage from "./pages/VoiceUploadPage";
 import AdminMemoryUploadPage from "./pages/admin/AdminMemoryDisplayPage";
 import AdminGalleryPage from "./pages/admin/AdminGalleryPage";
 import AdminVoiceUploadPage from "./pages/admin/AdminVoiceUploadPage";
+import NotFoundPage from "./pages/NotFound";
 function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/notfound" element={<NotFoundPage />} />
         <Route path="/:eventId" element={<UploadPage />} />
         <Route path="/:eventId/gallery" element={<GalleryPage />} />
         <Route path="/:eventId/memoryUpload" element={<MemoryUploadPage />} />
