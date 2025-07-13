@@ -9,8 +9,10 @@ import {
   getDoc,
   doc,
   updateDoc,
+  deleteDoc,
 } from "firebase/firestore";
-
+import { deleteObject, ref } from "firebase/storage";
+import { storage } from "../../firebaseConfig";
 import LightGallery from "lightgallery/react";
 import lgVideo from "lightgallery/plugins/video";
 
@@ -193,6 +195,60 @@ export default function AdminGalleryPage() {
     fetchEvent();
     fetchMedia();
   }, [eventId]);
+
+  const extractStoragePath = (url: string): string => {
+    const decodedUrl = decodeURIComponent(url);
+    const match = decodedUrl.match(/\/o\/(.*?)\?/); // "/o/FILE_PATH?"
+    if (match && match[1]) {
+      return match[1];
+    } else {
+      throw new Error("Storage path could not be extracted from URL.");
+    }
+  };
+
+  const deleteMedia = async (media: MediaItem) => {
+    if (!eventId) return;
+
+    const result = await Swal.fire({
+      title: "Emin misiniz?",
+      text: "Bu medya kalıcı olarak silinecek!",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Evet, sil",
+      cancelButtonText: "İptal",
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      // Firestore'dan sil
+      const mediaDocRef = doc(db, "events", eventId, "media", media.id);
+      // await updateDoc(mediaDocRef, { visibility: "deleting" }); // geçici koruma
+
+      const storagePath = extractStoragePath(media.src);
+      const fileRef = ref(storage, storagePath);
+      await deleteObject(fileRef);
+      await deleteDoc(mediaDocRef);
+
+      // Ekrandan kaldır
+      setMediaList((prev) => prev.filter((item) => item.id !== media.id));
+
+      Swal.fire({
+        title: "Silindi!",
+        text: "Medya başarıyla silindi.",
+        icon: "success",
+        confirmButtonText: "Tamam",
+      });
+    } catch (error) {
+      console.error("Medya silme hatası:", error);
+      Swal.fire({
+        title: "Hata!",
+        text: "Medya silinirken bir sorun oluştu.",
+        icon: "error",
+        confirmButtonText: "Tamam",
+      });
+    }
+  };
   const makePrivate = async (mediaId: string, currentVisibility: string) => {
     if (!eventId) return;
     const newVisibility = currentVisibility === "public" ? "private" : "public";
@@ -351,32 +407,33 @@ export default function AdminGalleryPage() {
       >
         {mediaList.map((media) => (
           <div key={media.id} className="relative rounded-lg overflow-hidden">
-            {media.visibility === "public" && (
+            {/* Butonlar için container */}
+            <div className="absolute top-2 right-2 z-20 flex flex-col gap-1 items-end">
               <button
                 onClick={(e) => {
-                  e.preventDefault(); // link açılmasını engelle
+                  e.preventDefault();
                   const visibility = media.visibility ?? "public";
                   makePrivate(media.id, visibility);
                 }}
-                className="absolute top-2 right-2 z-20 bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700 transition"
-                title="Medya Gizle"
+                className="bg-yellow-600 text-white px-2 py-1 rounded text-xs hover:bg-yellow-700 transition"
+                title={
+                  media.visibility === "public" ? "Medya Gizle" : "Medya Göster"
+                }
               >
-                Gizle
+                {media.visibility === "public" ? "Gizle" : "Göster"}
               </button>
-            )}
-            {media.visibility === "private" && (
+
               <button
                 onClick={(e) => {
-                  e.preventDefault(); // link açılmasını engelle
-                  const visibility = media.visibility ?? "public";
-                  makePrivate(media.id, visibility);
+                  e.preventDefault();
+                  deleteMedia(media);
                 }}
-                className="absolute top-2 right-2 z-20 bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700 transition"
-                title="Medya Gizle"
+                className="bg-red-700 text-white px-2 py-1 rounded text-xs hover:bg-red-800 transition"
+                title="Medya Sil"
               >
-                Göster
+                Sil
               </button>
-            )}
+            </div>
 
             {media.type === "image" ? (
               <a
