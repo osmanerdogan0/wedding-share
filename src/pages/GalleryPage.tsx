@@ -232,18 +232,27 @@ export default function GalleryPage() {
       shareBtn.innerHTML = "Paylaş";
       shareBtn.className = "lg-share-btn lg-icon";
       shareBtn.style.margin = "0 10px";
-      shareBtn.onclick = () => {
+      shareBtn.onclick = async () => {
         const currentIndex = lgInstance.index;
         const currentItem = lgInstance.galleryItems[currentIndex];
-        const shareData = {
-          title: "Galeri Paylaşımı",
-          url: currentItem.src,
-        };
-        if (navigator.share) {
-          navigator.share(shareData).catch(console.error);
-        } else {
-          navigator.clipboard.writeText(currentItem.src);
-          alert("Paylaşım desteklenmiyor. URL kopyalandı.");
+
+        try {
+          const response = await fetch(currentItem.src);
+          const blob = await response.blob();
+          const file = new File([blob], "photo.jpg", { type: blob.type });
+
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              title: "Galeri Paylaşımı",
+              files: [file],
+            });
+          } else {
+            navigator.clipboard.writeText(currentItem.src);
+            alert("Görsel paylaşımı desteklenmiyor. URL kopyalandı.");
+          }
+        } catch (err) {
+          console.error("Paylaşım hatası:", err);
+          alert("Paylaşım sırasında bir hata oluştu.");
         }
       };
       toolbar.appendChild(shareBtn);

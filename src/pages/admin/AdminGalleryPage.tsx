@@ -78,26 +78,29 @@ export default function AdminGalleryPage() {
       shareBtn.className = "lg-share-btn lg-icon";
       shareBtn.style.marginLeft = "10px";
       shareBtn.style.marginRight = "10px";
-      shareBtn.onclick = () => {
+      shareBtn.onclick = async () => {
         const currentIndex = lgInstance.index;
         const currentItem = lgInstance.galleryItems[currentIndex];
-        const shareData = {
-          title: "Galeri Paylaşımı",
-          url: currentItem.src,
-        };
 
-        if (navigator.share) {
-          navigator
-            .share(shareData)
-            .catch((err) => console.log("Paylaşma başarısız:", err));
-        } else {
-          alert(
-            "Tarayıcınız paylaşma özelliğini desteklemiyor. URL kopyalandı."
-          );
-          navigator.clipboard.writeText(currentItem.src);
+        try {
+          const response = await fetch(currentItem.src);
+          const blob = await response.blob();
+          const file = new File([blob], "photo.jpg", { type: blob.type });
+
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              title: "Galeri Paylaşımı",
+              files: [file],
+            });
+          } else {
+            navigator.clipboard.writeText(currentItem.src);
+            alert("Görsel paylaşımı desteklenmiyor. URL kopyalandı.");
+          }
+        } catch (err) {
+          console.error("Paylaşım hatası:", err);
+          alert("Paylaşım sırasında bir hata oluştu.");
         }
       };
-
       toolbar.appendChild(shareBtn);
     }
   };
@@ -105,7 +108,7 @@ export default function AdminGalleryPage() {
   const onBeforeSlide = (detail: any) => {
     const { index, prevIndex } = detail;
     console.log("Slide changing from", prevIndex, "to", index);
-    
+
     // Geçerli item'ı kontrol et
     const currentItem = mediaList[index];
     if (currentItem) {
@@ -117,25 +120,25 @@ export default function AdminGalleryPage() {
   const onAfterSlide = (detail: any) => {
     const { index } = detail;
     console.log("Slide changed to", index);
-    
+
     // Resim yükleme durumunu kontrol et
-    const imgElement = document.querySelector('.lg-current .lg-image');
+    const imgElement = document.querySelector(".lg-current .lg-image");
     if (imgElement) {
-      imgElement.addEventListener('error', (e) => {
-        console.error('Image failed to load:', e);
+      imgElement.addEventListener("error", (e) => {
+        console.error("Image failed to load:", e);
       });
-      imgElement.addEventListener('load', () => {
-        console.log('Image loaded successfully');
+      imgElement.addEventListener("load", () => {
+        console.log("Image loaded successfully");
       });
     }
   };
 
   const fixFirebaseUrl = (url: string): string => {
     // Firebase Storage URL'lerini CORS sorunlarını önlemek için düzenle
-    if (url.includes('firebasestorage.googleapis.com')) {
+    if (url.includes("firebasestorage.googleapis.com")) {
       // URL'ye &token= parametresi ekleyerek CORS sorununu çöz
-      if (!url.includes('&token=') && !url.includes('?token=')) {
-        const separator = url.includes('?') ? '&' : '?';
+      if (!url.includes("&token=") && !url.includes("?token=")) {
+        const separator = url.includes("?") ? "&" : "?";
         return `${url}${separator}alt=media`;
       }
     }
@@ -465,7 +468,7 @@ export default function AdminGalleryPage() {
           controls: true,
           showCloseIcon: true,
           download: false,
-          rotate: false
+          rotate: false,
         }}
       >
         {mediaList.map((media) => (
@@ -502,7 +505,9 @@ export default function AdminGalleryPage() {
               <a
                 className="lg-item block w-full aspect-square cursor-pointer"
                 data-src={fixFirebaseUrl(media.src)}
-                data-sub-html={`<h4>Gönderen: ${media.senderName || "Anonim"}</h4>`}
+                data-sub-html={`<h4>Gönderen: ${
+                  media.senderName || "Anonim"
+                }</h4>`}
               >
                 <img
                   src={media.src}
@@ -515,8 +520,12 @@ export default function AdminGalleryPage() {
               <a
                 className="lg-item block w-full aspect-square cursor-pointer"
                 data-src={fixFirebaseUrl(media.src)}
-                data-video={`{"source": [{"src":"${fixFirebaseUrl(media.src)}", "type":"video/mp4"}], "attributes": {"preload": false, "controls": true}}`}
-                data-sub-html={`<h4>Gönderen: ${media.senderName || "Anonim"}</h4>`}
+                data-video={`{"source": [{"src":"${fixFirebaseUrl(
+                  media.src
+                )}", "type":"video/mp4"}], "attributes": {"preload": false, "controls": true}}`}
+                data-sub-html={`<h4>Gönderen: ${
+                  media.senderName || "Anonim"
+                }</h4>`}
               >
                 <img
                   src={media.thumbnail}
