@@ -229,49 +229,105 @@ export default function GalleryPage() {
     const toolbar = document.querySelector(".lg-toolbar");
 
     if (toolbar && !document.querySelector(".lg-share-btn")) {
-      const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-
       const shareBtn = document.createElement("button");
-      shareBtn.innerHTML = isIOS ? "İndir" : "Paylaş";
+      shareBtn.innerHTML = "Paylaş";
       shareBtn.className = "lg-share-btn lg-icon";
-      shareBtn.style.marginLeft = "10px";
-      shareBtn.style.marginRight = "10px";
+      shareBtn.style.margin = "0 10px";
 
       shareBtn.onclick = async () => {
         const currentIndex = lgInstance.index;
         const currentItem = lgInstance.galleryItems[currentIndex];
 
-        if (isIOS) {
-          // iOS: yalnızca yeni sekmede açma önerilir
+        if (navigator.share) {
+          try {
+            // 1. Görseli çekme girişimi
+            const response = await fetch(currentItem.src);
+
+            // Eğer HTTP hatası varsa (örneğin 404, 500)
+            if (!response.ok) {
+              throw new Error(`HTTP hatası: ${response.status}`);
+            }
+
+            const blob = await response.blob();
+
+            // Dosya ismini belirleme
+            const urlParts = currentItem.src.split("/");
+            const fileName =
+              urlParts[urlParts.length - 1] || "gallery_image.jpg";
+
+            // File nesnesi oluşturma
+            const file = new File([blob], fileName, { type: blob.type });
+
+            // 2. Native dosya paylaşımını deneme
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+              await navigator.share({
+                files: [file],
+                title: "Galeri Paylaşımı",
+                text: "Bu fotoğrafı galeri uygulamasından paylaşıyorum.",
+              });
+            } else {
+              // Dosya paylaşımı desteklenmiyorsa URL paylaşımı (fallback)
+              await navigator.share({
+                title: "Galeri Paylaşımı",
+                url: currentItem.src,
+              });
+            }
+          } catch (error) {
+            console.error("Paylaşım hatası (Ağ veya CORS):", error);
+
+            // Hata durumunda URL paylaşımı ile devam etmeyi dene
+            if (navigator.share) {
+              try {
+                await navigator.share({
+                  title: "Galeri Paylaşımı",
+                  url: currentItem.src,
+                });
+              } catch (urlShareError) {
+                console.error(
+                  "URL paylaşımı da başarısız oldu:",
+                  urlShareError
+                );
+                const newWindow = window.open(currentItem.src, "_blank");
+
+                if (!newWindow) {
+                  alert(
+                    "Açılır pencere engellendi. Lütfen tarayıcı ayarlarını kontrol edin."
+                  );
+                } else {
+                  // iOS veya tarayıcı kısıtlamaları nedeniyle indirme başlamazsa
+                  alert(
+                    "Görsel yeni sekmede açıldı. Görselin üzerine uzun basarak kaydedebilir veya indirebilirsiniz."
+                  );
+                }
+              }
+            } else {
+              const newWindow = window.open(currentItem.src, "_blank");
+
+              if (!newWindow) {
+                alert(
+                  "Açılır pencere engellendi. Lütfen tarayıcı ayarlarını kontrol edin."
+                );
+              } else {
+                // iOS veya tarayıcı kısıtlamaları nedeniyle indirme başlamazsa
+                alert(
+                  "Görsel yeni sekmede açıldı. Görselin üzerine uzun basarak kaydedebilir veya indirebilirsiniz."
+                );
+              }
+            }
+          }
+        } else {
           const newWindow = window.open(currentItem.src, "_blank");
+
           if (!newWindow) {
             alert(
-              "Lütfen tarayıcı ayarlarından açılır pencere engelini kaldırın."
+              "Açılır pencere engellendi. Lütfen tarayıcı ayarlarını kontrol edin."
             );
           } else {
-            alert("Görsel açıldı. Uzun basılı tutarak kaydedebilirsiniz.");
+            // iOS veya tarayıcı kısıtlamaları nedeniyle indirme başlamazsa
+            alert(
+              "Görsel yeni sekmede açıldı. Görselin üzerine uzun basarak kaydedebilir veya indirebilirsiniz."
+            );
           }
-          return;
-        }
-
-        // Android ve diğer tarayıcılarda native paylaşımı dene
-        try {
-          const response = await fetch(currentItem.src);
-          const blob = await response.blob();
-          const file = new File([blob], "photo.jpg", { type: blob.type });
-
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              title: "Galeri Paylaşımı",
-              files: [file],
-            });
-          } else {
-            navigator.clipboard.writeText(currentItem.src);
-            alert("Paylaşım desteklenmiyor. URL kopyalandı.");
-          }
-        } catch (err) {
-          console.error("Paylaşım hatası:", err);
-          alert("İşlem sırasında bir hata oluştu.");
         }
       };
 
