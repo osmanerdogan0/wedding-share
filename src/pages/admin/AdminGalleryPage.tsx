@@ -52,6 +52,7 @@ type VideoMedia = {
 };
 
 type MediaItem = ImageMedia | VideoMedia;
+
 export default function AdminGalleryPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
@@ -66,6 +67,7 @@ export default function AdminGalleryPage() {
     adminPass: "",
   });
   const [isAuthorized, setIsAuthorized] = useState(false);
+
   const onInit = (detail: any) => {
     const lgInstance = detail.instance;
 
@@ -99,6 +101,47 @@ export default function AdminGalleryPage() {
       toolbar.appendChild(shareBtn);
     }
   };
+
+  const onBeforeSlide = (detail: any) => {
+    const { index, prevIndex } = detail;
+    console.log("Slide changing from", prevIndex, "to", index);
+    
+    // Geçerli item'ı kontrol et
+    const currentItem = mediaList[index];
+    if (currentItem) {
+      console.log("Current item:", currentItem);
+      console.log("Image URL:", currentItem.src);
+    }
+  };
+
+  const onAfterSlide = (detail: any) => {
+    const { index } = detail;
+    console.log("Slide changed to", index);
+    
+    // Resim yükleme durumunu kontrol et
+    const imgElement = document.querySelector('.lg-current .lg-image');
+    if (imgElement) {
+      imgElement.addEventListener('error', (e) => {
+        console.error('Image failed to load:', e);
+      });
+      imgElement.addEventListener('load', () => {
+        console.log('Image loaded successfully');
+      });
+    }
+  };
+
+  const fixFirebaseUrl = (url: string): string => {
+    // Firebase Storage URL'lerini CORS sorunlarını önlemek için düzenle
+    if (url.includes('firebasestorage.googleapis.com')) {
+      // URL'ye &token= parametresi ekleyerek CORS sorununu çöz
+      if (!url.includes('&token=') && !url.includes('?token=')) {
+        const separator = url.includes('?') ? '&' : '?';
+        return `${url}${separator}alt=media`;
+      }
+    }
+    return url;
+  };
+
   const loadImageSize = (
     url: string
   ): Promise<{ width: number; height: number }> => {
@@ -249,6 +292,7 @@ export default function AdminGalleryPage() {
       });
     }
   };
+
   const makePrivate = async (mediaId: string, currentVisibility: string) => {
     if (!eventId) return;
     const newVisibility = currentVisibility === "public" ? "private" : "public";
@@ -293,6 +337,7 @@ export default function AdminGalleryPage() {
       });
     }
   };
+
   if (!isAuthorized) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-8">
@@ -340,6 +385,7 @@ export default function AdminGalleryPage() {
       </div>
     );
   }
+
   return (
     <div style={{ padding: 20 }}>
       <h1
@@ -399,11 +445,28 @@ export default function AdminGalleryPage() {
           Henüz herkese açık bir Fotoğraf&Video Yüklenmemiş.
         </p>
       )}
+
       <LightGallery
         onInit={onInit}
+        onBeforeSlide={onBeforeSlide}
+        onAfterSlide={onAfterSlide}
         speed={500}
         plugins={[lgThumbnail, lgZoom, lgVideo]}
         elementClassNames="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4"
+        selector=".lg-item"
+        download={false}
+        actualSize={false}
+        showZoomInOutIcons={true}
+        allowMediaOverlap={true}
+        closable={true}
+        showCloseIcon={true}
+        mousewheel={true}
+        mobileSettings={{
+          controls: true,
+          showCloseIcon: true,
+          download: false,
+          rotate: false
+        }}
       >
         {mediaList.map((media) => (
           <div key={media.id} className="relative rounded-lg overflow-hidden">
@@ -437,42 +500,29 @@ export default function AdminGalleryPage() {
 
             {media.type === "image" ? (
               <a
-                href={media.src}
-                data-sub-html={`<h4>Gönderen: ${
-                  media.senderName || "Anonim"
-                }</h4>`}
-                className="block w-full aspect-square cursor-pointer"
+                className="lg-item block w-full aspect-square cursor-pointer"
+                data-src={fixFirebaseUrl(media.src)}
+                data-sub-html={`<h4>Gönderen: ${media.senderName || "Anonim"}</h4>`}
               >
                 <img
                   src={media.src}
                   alt=""
                   className="w-full h-full object-cover rounded-lg"
+                  loading="lazy"
                 />
               </a>
             ) : (
               <a
-                data-lg-size="1280-720"
-                data-sub-html={`<h4>Gönderen: ${
-                  media.senderName || "Anonim"
-                }</h4>`}
-                data-video={JSON.stringify({
-                  source: [
-                    {
-                      src: media.src,
-                      type: "video/mp4",
-                    },
-                  ],
-                  attributes: {
-                    preload: false,
-                    controls: true,
-                  },
-                })}
-                className="block w-full aspect-square cursor-pointer"
+                className="lg-item block w-full aspect-square cursor-pointer"
+                data-src={fixFirebaseUrl(media.src)}
+                data-video={`{"source": [{"src":"${fixFirebaseUrl(media.src)}", "type":"video/mp4"}], "attributes": {"preload": false, "controls": true}}`}
+                data-sub-html={`<h4>Gönderen: ${media.senderName || "Anonim"}</h4>`}
               >
                 <img
                   src={media.thumbnail}
                   alt="video"
                   className="w-full h-full object-cover rounded-lg"
+                  loading="lazy"
                 />
               </a>
             )}

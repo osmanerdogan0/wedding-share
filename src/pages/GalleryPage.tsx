@@ -24,6 +24,7 @@ import "lightgallery/css/lg-thumbnail.css";
 import "lightgallery/css/lg-video.css";
 
 type ImageMedia = {
+  id: string; // Add this
   src: string;
   width: number;
   height: number;
@@ -32,6 +33,7 @@ type ImageMedia = {
 };
 
 type VideoMedia = {
+  id: string; // Add this
   src: string;
   thumbnail: string;
   width: number;
@@ -81,11 +83,16 @@ export default function GalleryPage() {
   };
 
   const fetchMediaPage = async () => {
+    console.log("Medya Çek");
+    // EventId yoksa, daha fazla veri yoksa veya yükleme devam ediyorsa durdur.
     if (!eventId || !hasMore || loading) return;
     setLoading(true);
 
     try {
+      // 'q' değişkenini tanımlayın.
       let q;
+
+      // Eğer lastVisible (son görünen doküman) varsa, kaldığı yerden devam et.
       if (lastVisible) {
         q = query(
           collection(db, "events", eventId, "media"),
@@ -95,6 +102,7 @@ export default function GalleryPage() {
           limit(PAGE_SIZE)
         );
       } else {
+        // İlk yükleme, baştan başla.
         q = query(
           collection(db, "events", eventId, "media"),
           where("visibility", "==", "public"),
@@ -103,17 +111,28 @@ export default function GalleryPage() {
         );
       }
 
+      // 'q' değişkeninin tanımlı olduğundan emin olun. (Normalde bu if/else bloğu ile tanımlanmış olmalı)
+      if (!q) {
+        console.error("Sorgu (q) tanımlanamadı.");
+        setLoading(false);
+        return;
+      }
+
+      // Verileri Firestore'dan çek.
       const snapshot = await getDocs(q);
 
+      // Verileri işleyerek MediaItem tipine dönüştür.
       const items: MediaItem[] = await Promise.all(
         snapshot.docs.map(async (docSnap) => {
           const data = docSnap.data();
+          const id = docSnap.id; // Doküman ID'sini al.
           if (!data.url || !data.type) return null;
 
           if (data.type === "image") {
             try {
               const size = await loadImageSize(data.url);
               return {
+                id, // ID'yi ekleyin
                 src: data.url,
                 type: "image" as const,
                 width: size.width,
@@ -125,6 +144,7 @@ export default function GalleryPage() {
             }
           } else if (data.type === "video" && data.thumbnail) {
             return {
+              id, // ID'yi ekleyin
               src: data.url,
               thumbnail: data.thumbnail,
               type: "video" as const,
@@ -138,12 +158,39 @@ export default function GalleryPage() {
         })
       );
 
+      // Null değerleri kaldır.
       const filtered = items.filter((i): i is MediaItem => i !== null);
-      setMediaList((prev) => [...prev, ...filtered]);
 
-      if (snapshot.docs.length < PAGE_SIZE) setHasMore(false);
-      if (snapshot.docs.length > 0)
+      // Mevcut mediaList içindeki ID'lerin bir kümesini oluştur.
+      const existingIds = new Set(mediaList.map((item) => item.id));
+
+      // Sadece mevcut listede olmayan benzersiz öğeleri filtrele.
+      // Sadece mevcut listede olmayan benzersiz öğeleri filtrele.
+
+      // Benzersiz yeni öğeleri mevcut listeye ekle.
+      setMediaList((prev) => {
+        // Prev (önceki) state'i kullanarak mevcut ID'leri tekrar kontrol edin
+        const prevIds = new Set(prev.map((item) => item.id));
+
+        // Sadece daha önce listelenmemiş yeni öğeleri ekleyin
+        const trulyUniqueItems = filtered.filter(
+          (item) => !prevIds.has(item.id)
+        );
+
+        // Konsolda kaç öğe eklendiğini kontrol edebilirsiniz
+        // console.log("Adding unique items:", trulyUniqueItems.length);
+
+        return [...prev, ...trulyUniqueItems];
+      });
+      // Eğer çekilen doküman sayısı PAGE_SIZE'dan az ise, daha fazla veri yok demektir.
+      if (snapshot.docs.length < PAGE_SIZE) {
+        setHasMore(false);
+      }
+
+      // Bir sonraki sayfa için son görünen dokümanı ayarla.
+      if (snapshot.docs.length > 0) {
         setLastVisible(snapshot.docs[snapshot.docs.length - 1]);
+      }
     } catch (error) {
       console.error("Media fetch error:", error);
     }
@@ -251,7 +298,7 @@ export default function GalleryPage() {
         {mediaList.map((media, index) =>
           media.type === "image" ? (
             <a
-              key={index}
+              key={media.id}
               href={media.src}
               data-sub-html={`<h4>Gönderen: ${
                 media.senderName || "Anonim"
@@ -267,7 +314,7 @@ export default function GalleryPage() {
             </a>
           ) : (
             <a
-              key={index}
+              key={media.id}
               data-lg-size="1280-720"
               data-sub-html={`<h4>Gönderen: ${
                 media.senderName || "Anonim"
