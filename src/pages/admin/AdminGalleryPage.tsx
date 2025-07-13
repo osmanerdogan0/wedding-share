@@ -68,39 +68,40 @@ export default function AdminGalleryPage() {
   });
   const [isAuthorized, setIsAuthorized] = useState(false);
 
-const onInit = (detail: any) => {
-  const lgInstance = detail.instance;
-  const toolbar = document.querySelector(".lg-toolbar");
+  const onInit = (detail: any) => {
+    const lgInstance = detail.instance;
+    const toolbar = document.querySelector(".lg-toolbar");
 
-  if (toolbar && !document.querySelector(".lg-share-btn")) {
-    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (toolbar && !document.querySelector(".lg-share-btn")) {
+      const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-    const shareBtn = document.createElement("button");
-    shareBtn.innerHTML = isIOS ? "İndir" : "Paylaş";
-    shareBtn.className = "lg-share-btn lg-icon";
-    shareBtn.style.marginLeft = "10px";
-    shareBtn.style.marginRight = "10px";
+      const shareBtn = document.createElement("button");
+      shareBtn.innerHTML = isIOS ? "İndir" : "Paylaş";
+      shareBtn.className = "lg-share-btn lg-icon";
+      shareBtn.style.marginLeft = "10px";
+      shareBtn.style.marginRight = "10px";
 
-    shareBtn.onclick = async () => {
-      const currentIndex = lgInstance.index;
-      const currentItem = lgInstance.galleryItems[currentIndex];
-
-      try {
-        const response = await fetch(currentItem.src);
-        const blob = await response.blob();
+      shareBtn.onclick = async () => {
+        const currentIndex = lgInstance.index;
+        const currentItem = lgInstance.galleryItems[currentIndex];
 
         if (isIOS) {
-          // iOS: Görseli indir (indirilen dosya Fotoğraflar yerine Dosyalar'a gider)
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = "photo.jpg";
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        } else {
-          // Android ve diğerleri: Paylaş
+          // iOS: yalnızca yeni sekmede açma önerilir
+          const newWindow = window.open(currentItem.src, "_blank");
+          if (!newWindow) {
+            alert(
+              "Lütfen tarayıcı ayarlarından açılır pencere engelini kaldırın."
+            );
+          } else {
+            alert("Görsel açıldı. Uzun basılı tutarak kaydedebilirsiniz.");
+          }
+          return;
+        }
+
+        // Android ve diğer tarayıcılarda native paylaşımı dene
+        try {
+          const response = await fetch(currentItem.src);
+          const blob = await response.blob();
           const file = new File([blob], "photo.jpg", { type: blob.type });
 
           if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -112,17 +113,15 @@ const onInit = (detail: any) => {
             navigator.clipboard.writeText(currentItem.src);
             alert("Paylaşım desteklenmiyor. URL kopyalandı.");
           }
+        } catch (err) {
+          console.error("Paylaşım hatası:", err);
+          alert("İşlem sırasında bir hata oluştu.");
         }
-      } catch (err) {
-        console.error("Paylaşım/İndirme hatası:", err);
-        alert("İşlem sırasında bir hata oluştu.");
-      }
-    };
+      };
 
-    toolbar.appendChild(shareBtn);
-  }
-};
-
+      toolbar.appendChild(shareBtn);
+    }
+  };
 
   const onBeforeSlide = (detail: any) => {
     const { index, prevIndex } = detail;

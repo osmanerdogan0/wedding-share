@@ -241,37 +241,36 @@ export default function GalleryPage() {
         const currentIndex = lgInstance.index;
         const currentItem = lgInstance.galleryItems[currentIndex];
 
+        if (isIOS) {
+          // iOS: yalnızca yeni sekmede açma önerilir
+          const newWindow = window.open(currentItem.src, "_blank");
+          if (!newWindow) {
+            alert(
+              "Lütfen tarayıcı ayarlarından açılır pencere engelini kaldırın."
+            );
+          } else {
+            alert("Görsel açıldı. Uzun basılı tutarak kaydedebilirsiniz.");
+          }
+          return;
+        }
+
+        // Android ve diğer tarayıcılarda native paylaşımı dene
         try {
           const response = await fetch(currentItem.src);
           const blob = await response.blob();
+          const file = new File([blob], "photo.jpg", { type: blob.type });
 
-          if (isIOS) {
-            // Alternatif 1: Yeni sekmede aç
-            const newWindow = window.open(currentItem.src, "_blank");
-            if (!newWindow) {
-              alert(
-                "Lütfen tarayıcı ayarlarından açılır pencere engelini kaldırın."
-              );
-            } else {
-              alert(
-                "Görsel açıldı. Uzun basarak Fotoğraflarınıza kaydedebilirsiniz."
-              );
-            }
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              title: "Galeri Paylaşımı",
+              files: [file],
+            });
           } else {
-            const file = new File([blob], "photo.jpg", { type: blob.type });
-
-            if (navigator.canShare && navigator.canShare({ files: [file] })) {
-              await navigator.share({
-                title: "Galeri Paylaşımı",
-                files: [file],
-              });
-            } else {
-              navigator.clipboard.writeText(currentItem.src);
-              alert("Paylaşım desteklenmiyor. URL kopyalandı.");
-            }
+            navigator.clipboard.writeText(currentItem.src);
+            alert("Paylaşım desteklenmiyor. URL kopyalandı.");
           }
         } catch (err) {
-          console.error("Paylaşım/İndirme hatası:", err);
+          console.error("Paylaşım hatası:", err);
           alert("İşlem sırasında bir hata oluştu.");
         }
       };
