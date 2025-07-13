@@ -246,17 +246,18 @@ export default function GalleryPage() {
           const blob = await response.blob();
 
           if (isIOS) {
-            // iOS: Görseli indir (indirilen dosya Fotoğraflar yerine Dosyalar'a gider)
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = "photo.jpg";
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            // Alternatif 1: Yeni sekmede aç
+            const newWindow = window.open(currentItem.src, "_blank");
+            if (!newWindow) {
+              alert(
+                "Lütfen tarayıcı ayarlarından açılır pencere engelini kaldırın."
+              );
+            } else {
+              alert(
+                "Görsel açıldı. Uzun basarak Fotoğraflarınıza kaydedebilirsiniz."
+              );
+            }
           } else {
-            // Android ve diğerleri: Paylaş
             const file = new File([blob], "photo.jpg", { type: blob.type });
 
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
